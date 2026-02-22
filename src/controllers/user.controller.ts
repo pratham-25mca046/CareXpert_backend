@@ -4,11 +4,10 @@ import prisma from "../utils/prismClient";
 import bcrypt from "bcrypt";
 import { Response } from "express";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
-import { Role } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { Request } from "express";
 import { hash } from "crypto";
-import { isValidUUID } from "../utils/helper";
-import { TimeSlotStatus, AppointmentStatus } from "@prisma/client";
+import { isValidUUID, validatePassword } from "../utils/helper";
 
 const generateToken = async (userId: string) => {
   try {
@@ -73,6 +72,14 @@ const signup = async (req: Request, res: any) => {
     }
   }
 
+  // Validate password strength
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.isValid) {
+    return res
+      .status(400)
+      .json(new ApiError(400, passwordValidation.message || "Invalid password"));
+  }
+
   try {
     let existingUser = await prisma.user.findFirst({
       where: { name },
@@ -91,8 +98,8 @@ const signup = async (req: Request, res: any) => {
     }
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const result = await prisma.$transaction(async (prisma) => {
-      const user = await prisma.user.create({
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const user = await tx.user.create({
         data: {
           name: name.toLowerCase(),
           email,
@@ -104,7 +111,7 @@ const signup = async (req: Request, res: any) => {
       });
 
       if (role === "DOCTOR") {
-        await prisma.doctor.create({
+        await tx.doctor.create({
           data: {
             userId: user.id,
             specialty,
@@ -114,7 +121,7 @@ const signup = async (req: Request, res: any) => {
 
         // Auto-join doctor to city room based on clinic location
         if (clinicLocation) {
-          let cityRoom = await prisma.room.findFirst({
+          let cityRoom = await tx.room.findFirst({
             where: { name: clinicLocation },
           });
 
@@ -135,7 +142,7 @@ const signup = async (req: Request, res: any) => {
           });
         }
       } else {
-        await prisma.patient.create({
+        await tx.patient.create({
           data: { 
             userId: user.id,
             location: location || null,
@@ -144,7 +151,7 @@ const signup = async (req: Request, res: any) => {
 
         // Auto-join patient to city room based on location
         if (location) {
-          let cityRoom = await prisma.room.findFirst({
+          let cityRoom = await tx.room.findFirst({
             where: { name: location },
           });
 
@@ -198,6 +205,14 @@ const adminSignup = async (req: Request, res: any) => {
       .json(new ApiError(400, "Name, email, and password are required"));
   }
 
+  // Validate password strength
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.isValid) {
+    return res
+      .status(400)
+      .json(new ApiError(400, passwordValidation.message || "Invalid password"));
+  }
+
   try {
     let existingUser = await prisma.user.findFirst({
       where: { name },
@@ -216,9 +231,9 @@ const adminSignup = async (req: Request, res: any) => {
     }
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const result = await prisma.$transaction(async (prisma) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Create the user
-      const user = await prisma.user.create({
+      const user = await tx.user.create({
         data: {
           name: name.toLowerCase(),
           email,
@@ -230,7 +245,7 @@ const adminSignup = async (req: Request, res: any) => {
       });
 
       // Create the admin record
-      const admin = await prisma.admin.create({
+      const admin = await tx.admin.create({
         data: {
           userId: user.id,
           permissions: {
@@ -691,7 +706,7 @@ const getCommunityMembers = async (req: any, res: Response) => {
       return;
     }
 
-    const members = room.members.map(member => ({
+    const members = room.members.map((member: any) => ({
       id: member.id,
       name: member.name,
       email: member.email,
