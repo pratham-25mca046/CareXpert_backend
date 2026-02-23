@@ -16,6 +16,8 @@ import {
   getCommunityMembers,
   joinCommunity,
   leaveCommunity,
+  verifyEmail,
+  resendVerificationEmail,
 } from "../controllers/user.controller";
 import { isAuthenticated } from "../middlewares/auth.middleware";
 import { isDoctor, isPatient } from "../utils/helper";
@@ -27,6 +29,10 @@ router.post("/signup", signup);
 router.post("/admin-signup", adminSignup);
 router.post("/login", login);
 router.post("/logout", isAuthenticated, logout);
+
+// Email Verification routes
+router.get("/verify-email", verifyEmail);
+router.post("/resend-verification-email", resendVerificationEmail);
 
 router.get("/patient/profile/:id", isAuthenticated, userProfile);
 router.get("/doctor/profile/:id", isAuthenticated, doctorProfile);
