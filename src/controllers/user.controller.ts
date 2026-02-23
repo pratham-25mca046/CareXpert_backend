@@ -136,7 +136,7 @@ const signup = async (req: Request, res: any) => {
         }
       } else {
         await prisma.patient.create({
-          data: { 
+          data: {
             userId: user.id,
             location: location || null,
           },
@@ -282,6 +282,12 @@ const login = async (req: any, res: any) => {
       return res
         .status(401)
         .json(new ApiError(401, "Invalid username or password"));
+    }
+
+    if (user.deletedAt) {
+      return res
+        .status(403)
+        .json(new ApiError(403, "This account has been deactivated. Please contact support."));
     }
 
     const match = await bcrypt.compare(password, user.password);
@@ -597,7 +603,7 @@ const getUnreadNotificationCount = async (req: any, res: Response) => {
     const userId = (req as any).user?.id;
 
     const unreadCount = await prisma.notification.count({
-      where: { 
+      where: {
         userId,
         isRead: false,
       },
@@ -618,7 +624,7 @@ const markNotificationAsRead = async (req: any, res: Response) => {
     const { notificationId } = req.params;
 
     const notification = await prisma.notification.updateMany({
-      where: { 
+      where: {
         id: notificationId,
         userId,
       },
@@ -644,7 +650,7 @@ const markAllNotificationsAsRead = async (req: any, res: Response) => {
     const userId = (req as any).user?.id;
 
     await prisma.notification.updateMany({
-      where: { 
+      where: {
         userId,
         isRead: false,
       },

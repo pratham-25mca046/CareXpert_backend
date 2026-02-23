@@ -281,7 +281,7 @@ const softDeleteUser = async (req: Request, res: Response): Promise<void> => {
  */
 const changeUserRole = async (req: Request, res: Response): Promise<void> => {
     const { userId } = req.params;
-    const { role } = req.body;
+    const { role, specialty, clinicLocation, location } = req.body;
     const adminUserId = (req as any).user?.id;
 
     if (!userId || !isValidUUID(userId)) {
@@ -302,9 +302,20 @@ const changeUserRole = async (req: Request, res: Response): Promise<void> => {
         return;
     }
 
+    // Validate required fields when changing to DOCTOR
+    if (role === Role.DOCTOR) {
+        if (!specialty || !clinicLocation || specialty.trim() === "" || clinicLocation.trim() === "") {
+            res.status(400).json(
+                new ApiError(400, "specialty and clinicLocation are required when changing role to DOCTOR")
+            );
+            return;
+        }
+    }
+
     try {
         const user = await prisma.user.findUnique({
             where: { id: userId, deletedAt: null },
+            include: { doctor: true, patient: true, admin: true },
         });
 
         if (!user) {
@@ -317,15 +328,51 @@ const changeUserRole = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { role: role as Role },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-            },
+        const updatedUser = await prisma.$transaction(async (tx) => {
+            // Update the user's role
+            const updated = await tx.user.update({
+                where: { id: userId },
+                data: { role: role as Role },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                },
+            });
+
+            // Create the target role profile if it doesn't already exist
+            if (role === Role.DOCTOR && !user.doctor) {
+                await tx.doctor.create({
+                    data: {
+                        userId: user.id,
+                        specialty,
+                        clinicLocation,
+                    },
+                });
+            } else if (role === Role.PATIENT && !user.patient) {
+                await tx.patient.create({
+                    data: {
+                        userId: user.id,
+                        location: location || null,
+                    },
+                });
+            } else if (role === Role.ADMIN && !user.admin) {
+                await tx.admin.create({
+                    data: {
+                        userId: user.id,
+                        permissions: {
+                            canManageUsers: true,
+                            canManageDoctors: true,
+                            canManagePatients: true,
+                            canViewAnalytics: true,
+                            canManageSystem: true,
+                        },
+                    },
+                });
+            }
+
+            return updated;
         });
 
         res
