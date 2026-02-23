@@ -19,7 +19,7 @@ export const isAuthenticated = async (req: any, res: any, next: any) => {
 
     if (typeof decodedToken === "object" && decodedToken !== null) {
       const user = await prisma.user.findFirst({
-        where: { id: decodedToken.userId },
+        where: { id: decodedToken.userId, deletedAt: null },
         select: {
           id: true,
           name: true,
@@ -40,7 +40,7 @@ export const isAuthenticated = async (req: any, res: any, next: any) => {
       });
 
       if (!user) {
-        return res.status(404).json(new ApiError(404, "User not found"));
+        return res.status(401).json(new ApiError(401, "Account not found or has been deactivated"));
       }
 
       // Verify token version matches — rejects tokens issued before rotation

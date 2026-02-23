@@ -292,6 +292,12 @@ const login = async (req: any, res: any) => {
         .json(new ApiError(401, "Invalid username or password"));
     }
 
+    if (user.deletedAt) {
+      return res
+        .status(403)
+        .json(new ApiError(403, "This account has been deactivated. Please contact support."));
+    }
+
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res
